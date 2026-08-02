@@ -1,0 +1,35 @@
+# ===== Python =====
+# Python 虚拟环境目录（本地创建的 .venv 不提交）
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 本地爬虫产生的临时数据（演示/调试用 JSON）
+data/
+*.json.tmp
+
+# ===== 环境变量 =====
+# 敏感配置（API Key、数据库 URL）一律通过 .env 提供，不提交到仓库
+.env
+.env.local
+!.env.example
+
+# ===== Node / Next.js =====
+# 前端依赖与构建产物，运行时自动生成
+node_modules/
+.next/
+out/
+npm-debug.log*
+*.tsbuildinfo
+
+# ===== 编辑器 / 系统 =====
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Playwright 浏览器缓存由用户机器各自安装，不提交
+ms-playwright/

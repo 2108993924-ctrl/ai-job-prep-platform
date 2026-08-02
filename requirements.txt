@@ -1,0 +1,31 @@
+# ============================================================
+# Python dependencies (ASCII-only comments for Windows pip compat)
+# Install: pip install -r requirements.txt
+# ============================================================
+
+# Browser automation: render JS-heavy career pages (core dependency)
+playwright>=1.40.0
+
+# HTML parsing: extract JD text from pages
+beautifulsoup4>=4.12.0
+
+# Load .env config file
+python-dotenv>=1.0.0
+
+# OpenAI official SDK: JD structurization via LLM
+# Compatible with DeepSeek / SiliconFlow / Qwen etc. (OpenAI protocol)
+openai>=1.30.0
+
+# Supabase Python client: read/write Postgres
+supabase>=2.4.0
+
+# greenlet: pin 3.1.1 for Python 3.9 (no MSVC wheels for newer versions)
+# use >=3.2 for Python 3.13 (3.1.1 has no cp313 wheel)
+greenlet==3.1.1; python_version < "3.13"
+greenlet>=3.2.0; python_version >= "3.13"
+
+# Local cron scheduler (APScheduler)
+apscheduler>=3.10.0
+
+# HTTP requests: robots.txt probing
+requests>=2.31.0

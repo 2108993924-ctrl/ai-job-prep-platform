@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== 全局基础样式 ===== */
+html {
+  /* 平滑滚动（页面内锚点跳转） */
+  scroll-behavior: smooth;
+}
+
+body {
+  /* 浅色背景 + 深色文字，保证阅读舒适 */
+  @apply bg-slate-50 text-slate-800;
+}
+
+/* 自定义滚动条（备考面板等长内容区域更美观） */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-slate-300;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

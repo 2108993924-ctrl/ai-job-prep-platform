@@ -1,0 +1,73 @@
+# ============================================================
+# 每日定时任务：每天 06:00（UTC+8）执行爬虫 + LLM 结构化
+#
+# 使用前需要在 GitHub 仓库配置 Secrets（Settings -> Secrets -> Actions）：
+#   SUPABASE_URL              数据库地址（.env 中同名）
+#   SUPABASE_SERVICE_ROLE_KEY 服务端密钥
+#   OPENAI_API_KEY            LLM API Key
+#   OPENAI_BASE_URL           （可选）兼容接口地址，默认 OpenAI
+#   LLM_MODEL                 （可选）模型名
+#   CONTACT_EMAIL             （可选）爬虫 UA 联系方式
+#   FEISHU_WEBHOOK / SLACK_WEBHOOK（可选）失败告警
+#
+# 说明：GitHub Actions 免费额度为每个月 2000 分钟，
+# 每天 1 次、每次约 10 分钟的定时任务完全在免费范围内。
+# ============================================================
+
+name: daily-crawl
+
+on:
+  # 定时触发：每天 06:00（北京时间 = UTC 22:00 前一天）
+  schedule:
+    - cron: "0 22 * * *"
+  # 手动触发（仓库 Actions 页面点 "Run workflow" 按钮）
+  workflow_dispatch:
+
+# 并发控制：同一时刻只允许一个实例运行，避免重复爬取
+concurrency:
+  group: daily-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl-and-enrich:
+    runs-on: ubuntu-latest
+    # 每次运行最多 45 分钟，防止意外卡死占用免费额度
+    timeout-minutes: 45
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          # 缓存 pip 依赖，加速后续运行
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 安装 Playwright 浏览器（Chromium）
+        run: python -m playwright install --with-deps chromium
+
+      - name: 写入环境变量
+        # 将 GitHub Secrets 映射为 .env 文件（仅本次运行有效）
+        run: |
+          cat > .env <<'EOF'
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }}
+          LLM_MODEL=${{ secrets.LLM_MODEL }}
+          CONTACT_EMAIL=${{ secrets.CONTACT_EMAIL }}
+          FEISHU_WEBHOOK=${{ secrets.FEISHU_WEBHOOK }}
+          SLACK_WEBHOOK=${{ secrets.SLACK_WEBHOOK }}
+          EOF
+
+      - name: 运行每日任务（爬取 + 结构化）
+        run: python backend/main.py
+
+      # 任务失败时在 Actions 日志中明显标记，便于查看
+      - name: 任务结果标记
+        if: always()
+        run: echo "::notice::每日任务执行完毕，请查看上方日志确认各公司爬取情况"
