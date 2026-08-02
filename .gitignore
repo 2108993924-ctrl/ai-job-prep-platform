@@ -8,7 +8,9 @@ __pycache__/
 .pytest_cache/
 
 # 本地爬虫产生的临时数据（演示/调试用 JSON）
-data/
+# 注意：/data/ 仅忽略仓库根目录的本地数据（store、日志），
+# 前端展示数据 frontend/public/data/jobs.json 必须提交到仓库
+/data/
 *.json.tmp
 
 # ===== 环境变量 =====
