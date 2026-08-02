@@ -1,0 +1,109 @@
+# ============================================================
+# 月度定时任务：每月 1 日 08:00（北京时间）执行爬虫 + LLM 结构化
+# 完成后自动把数据推送回仓库，触发 Vercel 自动重新部署
+#
+# ⭐ 随时停止 / 恢复：
+#   仓库页面 -> Actions 标签 -> 左侧点击本工作流（monthly-crawl）
+#   -> 右上角 "···" 菜单 -> "Disable workflow"（停止）/ "Enable workflow"（恢复）
+#   -> 也可随时点 "Run workflow" 手动触发一次
+#
+# 使用前需在仓库配置 Secrets（Settings -> Secrets and variables -> Actions）：
+#   OPENAI_API_KEY   LLM API Key（必填，如 DeepSeek 的 sk-xxx）
+#   可选：OPENAI_BASE_URL / LLM_MODEL / CONTACT_EMAIL
+# ============================================================
+
+name: monthly-crawl
+
+on:
+  # 定时触发：每月 1 日 00:00 UTC = 北京时间 08:00
+  schedule:
+    - cron: "0 0 1 * *"
+  # 手动触发（Actions 页面点 "Run workflow"）
+  workflow_dispatch:
+
+# 允许工作流把更新后的数据推回仓库
+permissions:
+  contents: write
+
+# 并发控制：同一时刻只允许一个实例运行，避免重复爬取
+concurrency:
+  group: monthly-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl-and-enrich:
+    runs-on: ubuntu-latest
+    # 每月只跑一次，给足时间；单月用量远低于免费额度（2000 分钟/月）
+    timeout-minutes: 55
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 安装 Playwright 浏览器（Chromium）
+        run: python -m playwright install --with-deps chromium
+
+      # 把线上已有的数据拉回来作为历史库，实现增量更新：
+      # JD 未变的岗位不重新调用 LLM，只有新岗位才结构化（省钱）
+      - name: 恢复线上历史数据
+        run: |
+          mkdir -p data
+          curl -fsSL \
+            https://raw.githubusercontent.com/2108993924-ctrl/ai-job-prep-platform/master/frontend/public/data/jobs.json \
+            -o /tmp/jobs.json || echo "首次运行，无历史数据"
+          python - <<'PY'
+          import json, os
+          try:
+              arr = json.load(open("/tmp/jobs.json", encoding="utf-8"))
+              store = {j["job_id"]: j for j in arr if j.get("job_id")}
+              os.makedirs("data", exist_ok=True)
+              json.dump(store, open("data/local_store.json", "w", encoding="utf-8"),
+                        ensure_ascii=False, indent=2)
+              print("已恢复历史岗位", len(store), "条")
+          except Exception as exc:
+              print("无历史数据可恢复（首次运行）:", exc)
+          PY
+
+      - name: 写入环境变量（来自 GitHub Secrets）
+        run: |
+          cat > .env <<'EOF'
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }}
+          LLM_MODEL=${{ secrets.LLM_MODEL }}
+          CONTACT_EMAIL=${{ secrets.CONTACT_EMAIL }}
+          EOF
+
+      - name: 爬取 + 结构化 + 导出前端数据
+        run: |
+          # 当前可用的公司适配器：腾讯（广深）、阶跃星辰、速腾聚创（mokahr 系统）
+          python backend/main.py --adapter tencent mokahr --no-enrich
+          # 增量结构化：只有 JD 变化/新增的岗位才调用 LLM
+          python backend/main.py --enrich-only
+          python backend/export_frontend_data.py
+
+      # 数据文件有变化就提交并推送，触发 Vercel 自动重新部署
+      - name: 推送数据回仓库
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/public/data/jobs.json
+          if git diff --cached --quiet; then
+            echo "本次数据无变化，跳过推送"
+          else
+            git commit -m "chore: 月度数据更新 $(date +%Y-%m-%d)"
+            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+            git push origin HEAD:master
+            echo "已推送，Vercel 将自动重新部署"
+          fi
+
+      - name: 任务结果标记
+        if: always()
+        run: echo "::notice::月度任务执行完毕，请查看上方日志确认各公司爬取情况"
